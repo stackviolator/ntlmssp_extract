@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/akamensky/argparse"
 	"github.com/google/gopacket"
@@ -19,11 +20,13 @@ func initPackets(file string) {
 		for packet := range packetSource.Packets() {
 			appLayer := packet.ApplicationLayer()
 			if appLayer != nil {
-				fmt.Println("Application Layer found")
-				// fmt.Printf("Printing full packet: %s\n", packet)
-				fmt.Printf("Application Layer data: %s\n", appLayer.Payload())
-				for _, b := range appLayer.Payload() {
-					fmt.Printf("%d ", b)
+				if strings.Contains(appLayer.Payload(), "mike") {
+
+					fmt.Println("Application Layer found")
+					fmt.Printf("Application Layer data: %s\n", appLayer.Payload())
+					for _, b := range appLayer.Payload() {
+						fmt.Printf("%d ", b)
+					}
 				}
 			}
 			fmt.Println("")

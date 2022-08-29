@@ -9,18 +9,31 @@ import (
 	"github.com/google/gopacket/pcap"
 )
 
-func handlePackets(file string) {
+// Use as interim function to create and feed packets into meat of program
+func initPackets(file string) {
+	// Open PCAP from file
 	if handle, err := pcap.OpenOffline(file); err != nil {
 		panic(err)
 	} else {
 		packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 		for packet := range packetSource.Packets() {
-			fmt.Println(packet)
+			appLayer := packet.ApplicationLayer()
+			if appLayer != nil {
+				fmt.Println("Application Layer found")
+				// fmt.Printf("Printing full packet: %s\n", packet)
+				fmt.Printf("Application Layer data: %s\n", appLayer.Payload())
+				for _, b := range appLayer.Payload() {
+					fmt.Printf("%d ", b)
+				}
+			}
+			fmt.Println("")
+			fmt.Println("")
 		}
 	}
 }
 
 func main() {
+	// Set up the argparse system
 	parser := argparse.NewParser("test", "i am testing rn")
 	file := parser.String("f", "file", &argparse.Options{Required: true, Help: "Input PCAP file"})
 	err := parser.Parse(os.Args)
@@ -28,5 +41,6 @@ func main() {
 		fmt.Print(parser.Usage(err))
 	}
 
-	handlePackets(*file)
+	// Call packet init sequence
+	initPackets(*file)
 }

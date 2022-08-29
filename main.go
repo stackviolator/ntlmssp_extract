@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+	"os"
 
+	"github.com/akamensky/argparse"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 )
 
-func main() {
+func handlePackets() {
 	if handle, err := pcap.OpenOffline("./capture.pcap"); err != nil {
 		panic(err)
 	} else {
@@ -16,4 +18,15 @@ func main() {
 			fmt.Println(packet)
 		}
 	}
+}
+
+func main() {
+	parser := argparse.NewParser("test", "i am testing rn")
+	file := parser.String("f", "file", &argparse.Options{Required: true, Help: "Input PCAP file"})
+	err := parser.Parse(os.Args)
+	if err != nil {
+		fmt.Print(parser.Usage(err))
+	}
+
+	fmt.Println(*file)
 }

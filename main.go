@@ -9,6 +9,9 @@ import (
 	"github.com/google/gopacket/pcap"
 )
 
+// Format of hash
+// [Username]::[Domain]:[NTLM Server Challenge]:[NTProofStr]:[Rest of NTLM Response]
+
 // See if the the 4-8 index of the ApplicationLayer array == the SMB protocol ID
 func checkSMBProtocol(arr []byte) bool {
 	smb2Id := []byte{254, 83, 77, 66}
@@ -31,18 +34,21 @@ func initPackets(file string) {
 			appLayer := packet.ApplicationLayer()
 			// If there is an application layer in the packet
 			if appLayer != nil {
-				fmt.Println("Application Layer found!")
-				if checkSMBProtocol(appLayer.Payload()[4:8]) {
-					fmt.Println("SMB2 Packet found!")
-					// fmt.Printf("Application Layer data: %s\n", string(appLayer.Payload()))
-					for _, b := range appLayer.Payload() {
-						// Looking at direct bytes
-						fmt.Printf("%x ", byte(b))
+				// TODO: only pulling out long packets (for testing)
+				if len(appLayer.Payload()) > 200 {
+					fmt.Println("Application Layer found!")
+					if checkSMBProtocol(appLayer.Payload()[4:8]) {
+						fmt.Println("SMB2 Packet found!")
+						fmt.Printf("Length of payload: %d\n", len(appLayer.Payload()))
+						// TODO: Print out all the raw bytes (testing)
+						for _, b := range appLayer.Payload() {
+							// Looking at direct bytes
+							fmt.Printf("%x ", byte(b))
+						}
 					}
+					fmt.Println("\n")
 				}
 			}
-			fmt.Println("")
-			fmt.Println("")
 		}
 	}
 }
@@ -55,7 +61,6 @@ func main() {
 	if err != nil {
 		fmt.Print(parser.Usage(err))
 	}
-
 	// Call packet init sequence
 	initPackets(*file)
 }

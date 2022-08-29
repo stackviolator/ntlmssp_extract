@@ -9,8 +9,8 @@ import (
 	"github.com/google/gopacket/pcap"
 )
 
-func handlePackets() {
-	if handle, err := pcap.OpenOffline("./capture.pcap"); err != nil {
+func handlePackets(file string) {
+	if handle, err := pcap.OpenOffline(file); err != nil {
 		panic(err)
 	} else {
 		packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
@@ -28,5 +28,5 @@ func main() {
 		fmt.Print(parser.Usage(err))
 	}
 
-	fmt.Println(*file)
+	handlePackets(*file)
 }

@@ -227,15 +227,11 @@ func openDevice(device string) []gopacket.Packet {
 	for packet := range packetSource.Packets() {
 		appLayer := packet.ApplicationLayer()
 		// If there is an application layer in the packet
-		if appLayer != nil {
-			if len(appLayer.Payload()) > 0 {
-				if len(appLayer.Payload()) > 10 {
-					if checkIdBytes(appLayer.Payload()[4:8], smb_protocol_id) {
-						packets = append(packets, packet)
-						packets = append(packets, packet)
-						num_captured++
-					}
-				}
+		if appLayer != nil && len(appLayer.Payload()) > 10 {
+			if checkIdBytes(appLayer.Payload()[4:8], smb_protocol_id) {
+				packets = append(packets, packet)
+				packets = append(packets, packet)
+				num_captured++
 			}
 		}
 		if num_captured > 100 {

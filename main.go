@@ -50,6 +50,7 @@ func checkIdBytes(arr []byte, id_arr []byte) bool {
 
 // Use as interim function to create and feed packets into meat of program
 func initPackets(file string) {
+	var smb_packets []SMBPacket
 	// Open PCAP from file
 	if handle, err := pcap.OpenOffline(file); err != nil {
 		panic(err)
@@ -63,10 +64,15 @@ func initPackets(file string) {
 					if checkIdBytes(appLayer.Payload()[4:8], smb_protocol_id) {
 						fmt.Println("SMB2 Packet found!")
 						smbPacket := makeSMBPacket(packet)
-						fmt.Printf("Length: %d\n", len(smbPacket.payload))
+						smb_packets = append(smb_packets, smbPacket)
 					}
 				}
 			}
+		}
+	}
+	for _, p := range smb_packets {
+		if p.username != nil {
+			fmt.Println(p.username)
 		}
 	}
 }

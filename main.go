@@ -7,7 +7,9 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"os"
+	"time"
 
 	"github.com/akamensky/argparse"
 	"github.com/google/gopacket"
@@ -50,26 +52,40 @@ func checkIdBytes(arr []byte, id_arr []byte) bool {
 
 // Parse pcap to pull out SMB2 packets, and add to an array
 func initPackets(file string) {
-	var smb_packets []SMBPacket
-	// Open PCAP from file
-	if handle, err := pcap.OpenOffline(file); err != nil {
-		panic(err)
-	} else {
-		packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-		for packet := range packetSource.Packets() {
-			appLayer := packet.ApplicationLayer()
-			// If there is an application layer in the packet
-			if appLayer != nil {
-				if len(appLayer.Payload()) > 0 {
-					if checkIdBytes(appLayer.Payload()[4:8], smb_protocol_id) {
-						smbPacket := makeSMBPacket(packet)
-						smb_packets = append(smb_packets, smbPacket)
+	var packets []gopacket.Packet
+	if file != "" {
+		// Open PCAP from file
+		if handle, err := pcap.OpenOffline(file); err != nil {
+			panic(err)
+		} else {
+			packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
+			for packet := range packetSource.Packets() {
+				appLayer := packet.ApplicationLayer()
+				// If there is an application layer in the packet
+				if appLayer != nil {
+					if len(appLayer.Payload()) > 0 {
+						if len(appLayer.Payload()) > 10 {
+							if checkIdBytes(appLayer.Payload()[4:8], smb_protocol_id) {
+								packets = append(packets, packet)
+							}
+						}
 					}
 				}
 			}
 		}
+		handleGoPackets(packets)
 	}
-	extract_hashes(smb_packets)
+}
+
+func handleGoPackets(packets []gopacket.Packet) {
+	var smbPackets []SMBPacket
+
+	for _, p := range packets {
+		smbPacket := makeSMBPacket(p)
+		smbPackets = append(smbPackets, smbPacket)
+	}
+
+	extract_hashes(smbPackets)
 }
 
 // Format of hash
@@ -180,14 +196,90 @@ func bytesArrToInt(arr []byte) int {
 	return int(binary.LittleEndian.Uint64(usable))
 }
 
+func capturePackets(flag bool, device string) {
+	if flag {
+		if device == "" {
+			findDevices()
+		} else {
+			packets := openDevice(device)
+			handleGoPackets(packets)
+		}
+	}
+}
+
+func openDevice(device string) []gopacket.Packet {
+	// Needed vars
+	var (
+		snapshot_len int32 = 1024
+		promiscuous  bool  = false
+		err          error
+		timeout      time.Duration = 30 * time.Second
+		handle       *pcap.Handle
+		packets      []gopacket.Packet
+		num_captured int
+	)
+
+	handle, err = pcap.OpenLive(device, snapshot_len, promiscuous, timeout)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer handle.Close()
+
+	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
+
+	fmt.Println("Capturing 100 SMB2 packets...")
+	for packet := range packetSource.Packets() {
+		appLayer := packet.ApplicationLayer()
+		// If there is an application layer in the packet
+		if appLayer != nil {
+			if len(appLayer.Payload()) > 0 {
+				if len(appLayer.Payload()) > 10 {
+					if checkIdBytes(appLayer.Payload()[4:8], smb_protocol_id) {
+						packets = append(packets, packet)
+						packets = append(packets, packet)
+						num_captured++
+					}
+				}
+			}
+		}
+		if num_captured > 100 {
+			break
+		}
+	}
+
+	return packets
+}
+
+func findDevices() {
+	devices, err := pcap.FindAllDevs()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Found devices")
+	for _, dev := range devices {
+		fmt.Println("\nName: ", dev.Name)
+		fmt.Println("Description:", dev.Description)
+		fmt.Println("Device addresses: ")
+		for _, addr := range dev.Addresses {
+			fmt.Printf("\tIP Address: %s\n", addr.IP)
+			fmt.Printf("\tSubnet mask: %s\n", addr.Netmask)
+		}
+	}
+}
+
 func main() {
 	// Set up the argparse system
 	parser := argparse.NewParser("go run main.go", "NTLM Extactor - Pull NetNTLMv2 hashes from a PCAP file")
-	file := parser.String("f", "file", &argparse.Options{Required: true, Help: "Input PCAP file"})
+	file := parser.String("f", "file", &argparse.Options{Required: false, Help: "Input PCAP file"})
+	live := parser.Flag("l", "live-capture", &argparse.Options{Required: false, Help: "Live capture of packets on your network"})
+	device := parser.String("d", "device", &argparse.Options{Required: false, Help: "Device for live capture"})
 	err := parser.Parse(os.Args)
 	if err != nil {
 		fmt.Print(parser.Usage(err))
 	}
+
+	capturePackets(*live, *device)
 	// Call packet init sequence
 	initPackets(*file)
 	fmt.Println()

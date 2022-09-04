@@ -61,14 +61,10 @@ func initPackets(file string) {
 			packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 			for packet := range packetSource.Packets() {
 				appLayer := packet.ApplicationLayer()
-				// If there is an application layer in the packet
-				if appLayer != nil {
-					if len(appLayer.Payload()) > 0 {
-						if len(appLayer.Payload()) > 10 {
-							if checkIdBytes(appLayer.Payload()[4:8], smb_protocol_id) {
-								packets = append(packets, packet)
-							}
-						}
+				// If there is an application layer in the packet and it isnt a little baby packet
+				if appLayer != nil && len(appLayer.Payload()) > 10 {
+					if checkIdBytes(appLayer.Payload()[4:8], smb_protocol_id) {
+						packets = append(packets, packet)
 					}
 				}
 			}
@@ -246,7 +242,6 @@ func openDevice(device string) []gopacket.Packet {
 			break
 		}
 	}
-
 	return packets
 }
 

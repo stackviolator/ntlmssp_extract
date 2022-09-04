@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	"encoding/binary"
 	"fmt"
 	"os"
 
@@ -13,9 +13,12 @@ import (
 type SMBPacket struct {
 	header_length int
 	payload       []byte
+	smbPacket     []byte
+	blob          []byte
 	header        []byte
 	protocol_id   []byte
 	SSP           []byte
+	NTLM_Response []byte
 }
 
 // Format of hash
@@ -26,6 +29,18 @@ func checkSMBProtocol(arr []byte) bool {
 	smb2Id := []byte{254, 83, 77, 66}
 	for i, b := range arr {
 		if b != smb2Id[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// TODO: combine these two functions
+func checkSSP(arr []byte) bool {
+	// bytes for the string "NTLMSSP"
+	ssp_str := []byte{0x4e, 0x54, 0x4c, 0x4d, 0x53, 0x53, 0x50, 0x00}
+	for i, b := range ssp_str {
+		if b != arr[i] {
 			return false
 		}
 	}
@@ -53,16 +68,6 @@ func initPackets(file string) {
 					if checkSMBProtocol(smbPacket.protocol_id) {
 						fmt.Println("SMB2 Packet found!")
 
-						debugPrint(packet.Data())
-
-						for i := 0; i < 9; i++ {
-							fmt.Printf("%x ", smbPacket.payload[80+i])
-						}
-
-						fmt.Println("\n")
-
-						debugPrint(smbPacket.SSP)
-
 					}
 					fmt.Println("\n")
 				}
@@ -71,6 +76,12 @@ func initPackets(file string) {
 	}
 }
 
+/*
+	Print a byte array (in practice, a packet) in the format of:
+	0000: 00 00 00 00 00 00 00 00
+	0010: 00 00 00 00 00 00 00 00
+	0020: 00 00 00 00 00 00 00 00
+*/
 func debugPrint(payload []byte) {
 	for i := 0; i <= (len(payload) / 16); i++ {
 		fmt.Printf("%4x: ", i)
@@ -107,21 +118,50 @@ func arrInSubArray(sub []int, arr []int) bool {
 
 func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
 	var packet SMBPacket
-	// bytes for the string "NTLMSSP"
-	ssp_str := []byte{0x4e, 0x54, 0x4c, 0x4d, 0x53, 0x53, 0x50, 0x00}
 
 	// Place the entire raw packet
 	packet.payload = raw_packet.Data()
-	packet.protocol_id = raw_packet.ApplicationLayer().Payload()[4:7]
+	// ApplicationLayer.Payload() includes the NetBIOS junk, which is generally unneeded
+	packet.smbPacket = raw_packet.ApplicationLayer().Payload()[4:]
+	packet.protocol_id = packet.smbPacket[:3]
+
 	// Header length is directly after protocol id
-	packet.header_length = int(raw_packet.ApplicationLayer().Payload()[8])
-	packet.header = raw_packet.ApplicationLayer().Payload()[:packet.header_length]
+	packet.header_length = bytesArrToInt(packet.smbPacket[4:5])
+	packet.header = packet.smbPacket[:packet.header_length]
+
+	blob_offset := bytesArrToInt(packet.smbPacket[packet.header_length+12 : packet.header_length+14])
+
+	packet.blob = packet.smbPacket[blob_offset:]
+	fmt.Println(blob_offset)
+
 	// Check if the NTLMSSP Identifier is "NTLMSSP"
-	if bytes.Equal(raw_packet.ApplicationLayer().Payload()[packet.header_length+44:], ssp_str) {
+	if checkSSP(packet.smbPacket[packet.header_length+44:]) {
 		packet.SSP = raw_packet.ApplicationLayer().Payload()[packet.header_length+44:]
+		NTLM_Maxlen := bytesArrToInt(packet.SSP[22:24])
+		packet.NTLM_Response = packet.SSP[112 : 112+NTLM_Maxlen]
 	}
 
+	debugPrint(packet.smbPacket)
+	fmt.Println()
+	debugPrint(packet.blob)
+	fmt.Println()
+
 	return packet
+}
+
+// Convert byte arr to an int, useful for length field in a packet
+func bytesArrToInt(arr []byte) int {
+	init_len := len(arr)
+
+	if init_len > 8 {
+		fmt.Println("Can't take a byte string longer than 8")
+	}
+
+	for i := 0; i < 8-init_len; i++ {
+		arr = append(arr, 0)
+	}
+
+	return int(binary.LittleEndian.Uint64(arr))
 }
 
 func main() {

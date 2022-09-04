@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -14,21 +15,28 @@ type SMBPacket struct {
 	header_length int
 	payload       []byte
 	smbPacket     []byte
+	req_type      []byte
+	response      bool
+	struct_len    int
 	blob          []byte
 	header        []byte
 	protocol_id   []byte
 	SSP           []byte
 	NTLM_Response []byte
 	NTProofStr    []byte
+	rest_of_NTLM  []byte
 	domain        []byte
 	username      []byte
+	NT_challenge  []byte
 }
 
 // Format of hash
 // [Username]::[Domain]:[NTLM Server Challenge]:[NTProofStr]:[Rest of NTLM Response]
 
-var smb_protocol_id = []byte{0xf3, 0x53, 0x4d, 0x42}
+var smb_protocol_id = []byte{0xfe, 0x53, 0x4d, 0x42}
 var NTLMSSP_identifier = []byte{0x4e, 0x54, 0x4c, 0x4d, 0x53, 0x53, 0x50, 0x00}
+var NTLMSSP_AUTH = []byte{03, 00, 00, 00}
+var NTLMSSP_CHALLENGE = []byte{02, 00, 00, 00}
 
 // See if two given byte arrays are equal, used to identify parts of packets
 func checkIdBytes(arr []byte, id_arr []byte) bool {
@@ -51,17 +59,12 @@ func initPackets(file string) {
 			appLayer := packet.ApplicationLayer()
 			// If there is an application layer in the packet
 			if appLayer != nil {
-
-				// TODO: only pulling out long packets (for testing)
-				if len(appLayer.Payload()) > 200 {
-					fmt.Println("Application Layer found!")
-					smbPacket := makeSMBPacket(packet)
-					fmt.Printf("Length: %d\n", len(smbPacket.payload))
-
-					if checkIdBytes(smbPacket.protocol_id, smb_protocol_id) {
+				if len(appLayer.Payload()) > 0 {
+					if checkIdBytes(appLayer.Payload()[4:8], smb_protocol_id) {
 						fmt.Println("SMB2 Packet found!")
+						smbPacket := makeSMBPacket(packet)
+						fmt.Printf("Length: %d\n", len(smbPacket.payload))
 					}
-					fmt.Println("\n")
 				}
 			}
 		}
@@ -86,28 +89,6 @@ func debugPrint(payload []byte) {
 	}
 }
 
-func arrInSubArray(sub []int, arr []int) bool {
-	n := len(sub)
-	m := len(arr)
-	i, j := 0, 0
-
-	for i < n && j < m {
-		if sub[i] == arr[j] {
-			i += 1
-			j += 1
-
-			if j == m {
-				return true
-			}
-		} else {
-			i = i - j + 1
-			j = 0
-			return false
-		}
-	}
-	return false
-}
-
 func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
 	var packet SMBPacket
 
@@ -115,43 +96,71 @@ func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
 	packet.payload = raw_packet.Data()
 	// ApplicationLayer.Payload() includes the NetBIOS junk, which is generally unneeded
 	packet.smbPacket = raw_packet.ApplicationLayer().Payload()[4:]
-	packet.protocol_id = packet.smbPacket[:3]
+	packet.protocol_id = packet.smbPacket[:4]
 
 	// Header length is directly after protocol id
 	packet.header_length = bytesArrToInt(packet.smbPacket[4:5])
 	packet.header = packet.smbPacket[:packet.header_length]
 
-	blob_offset := bytesArrToInt(packet.smbPacket[packet.header_length+12 : packet.header_length+14])
+	packet.req_type = packet.header[12:14]
 
-	packet.blob = packet.smbPacket[blob_offset:]
+	// Require the "command" is "Session Setup Request"
+	if bytes.Equal(packet.req_type, []byte{1, 0}) {
+		// Length of "Structure Size" is the hex val at Structure size >> 1
+		b := bytesArrToInt(packet.smbPacket[packet.header_length : packet.header_length+2])
+		b = b >> 1
+		blob_offset := bytesArrToInt(packet.smbPacket[packet.header_length+b : packet.header_length+b+2])
 
-	// Check if the NTLMSSP Identifier is "NTLMSSP"
-	if checkIdBytes(packet.smbPacket[blob_offset+16:], NTLMSSP_identifier) {
-		packet.SSP = packet.blob[16:]
+		/*
+			Last bit in "Flags" determines if the packet is a request or a response
+			Use binary and to determine if the last bit is set to 1 or not
+		*/
+		b = bytesArrToInt(packet.smbPacket[16:20])
+		b = b & 1
+		if b == 1 {
+			packet.response = true
+		} else {
+			packet.response = false
+		}
 
-		NTLM_Offset := bytesArrToInt(packet.SSP[24:28])
-		NTLM_Maxlen := bytesArrToInt(packet.SSP[22:24])
-		fmt.Println(NTLM_Offset, NTLM_Maxlen)
-		packet.NTLM_Response = packet.SSP[NTLM_Offset : NTLM_Offset+NTLM_Maxlen]
-		packet.NTProofStr = packet.NTLM_Response[:16]
+		if blob_offset < len(packet.smbPacket) {
+			packet.blob = packet.smbPacket[blob_offset:]
+			// Request packet
+			if packet.response == false {
+				if checkIdBytes(packet.smbPacket[blob_offset+16:], NTLMSSP_identifier) {
+					packet.SSP = packet.blob[16:]
+					if checkIdBytes(packet.SSP[8:], NTLMSSP_AUTH) {
 
-		domain_Offset := bytesArrToInt(packet.SSP[32:36])
-		domain_Maxlen := bytesArrToInt(packet.SSP[30:32])
-		packet.domain = packet.SSP[domain_Offset : domain_Offset+domain_Maxlen]
+						NTLM_Offset := bytesArrToInt(packet.SSP[24:28])
+						NTLM_Maxlen := bytesArrToInt(packet.SSP[22:24])
+						packet.NTLM_Response = packet.SSP[NTLM_Offset : NTLM_Offset+NTLM_Maxlen]
+						packet.NTProofStr = packet.NTLM_Response[:16]
+						packet.rest_of_NTLM = packet.NTLM_Response[16:]
 
-		username_Offset := bytesArrToInt(packet.SSP[40:44])
-		username_Maxlen := bytesArrToInt(packet.SSP[38:40])
-		fmt.Println(username_Offset, username_Maxlen)
-		packet.username = packet.SSP[username_Offset : username_Offset+username_Maxlen]
+						domain_Offset := bytesArrToInt(packet.SSP[32:36])
+						domain_Maxlen := bytesArrToInt(packet.SSP[30:32])
+						packet.domain = packet.SSP[domain_Offset : domain_Offset+domain_Maxlen]
+
+						username_Offset := bytesArrToInt(packet.SSP[40:44])
+						username_Maxlen := bytesArrToInt(packet.SSP[38:40])
+						packet.username = packet.SSP[username_Offset : username_Offset+username_Maxlen]
+					} else if checkIdBytes(packet.smbPacket[blob_offset+24:], NTLMSSP_CHALLENGE) {
+						fmt.Println("TODO Challenge Resp")
+					}
+				}
+				// Response packet
+			} else {
+				if len(packet.smbPacket) > blob_offset+33 && checkIdBytes(packet.smbPacket[blob_offset+33:], NTLMSSP_identifier) {
+					packet.SSP = packet.blob[33:]
+					if checkIdBytes(packet.SSP[8:], NTLMSSP_CHALLENGE) {
+						debugPrint(packet.SSP)
+
+						packet.NT_challenge = packet.SSP[24:32]
+					}
+				}
+			}
+		}
 	}
-
-	debugPrint(packet.smbPacket)
-	fmt.Println()
-	debugPrint(packet.SSP)
-	fmt.Println()
-	debugPrint(packet.domain)
-	debugPrint(packet.username)
-
 	return packet
 }
 

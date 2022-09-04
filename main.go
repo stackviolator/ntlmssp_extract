@@ -53,6 +53,28 @@ func initPackets(file string) {
 	}
 }
 
+func arrInSubArray(sub []int, arr []int) bool {
+	n := len(sub)
+	m := len(arr)
+	i, j := 0, 0
+
+	for i < n && j < m {
+		if sub[i] == arr[j] {
+			i += 1
+			j += 1
+
+			if j == m {
+				return true
+			}
+		} else {
+			i = i - j + 1
+			j = 0
+			return false
+		}
+	}
+	return false
+}
+
 func main() {
 	// Set up the argparse system
 	parser := argparse.NewParser("test", "i am testing rn")
@@ -63,4 +85,5 @@ func main() {
 	}
 	// Call packet init sequence
 	initPackets(*file)
+
 }

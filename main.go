@@ -30,9 +30,6 @@ type SMBPacket struct {
 	NT_challenge  []byte
 }
 
-// Format of hash
-// [Username]::[Domain]:[NTLM Server Challenge]:[NTProofStr]:[Rest of NTLM Response]
-
 var smb_protocol_id = []byte{0xfe, 0x53, 0x4d, 0x42}
 var NTLMSSP_identifier = []byte{0x4e, 0x54, 0x4c, 0x4d, 0x53, 0x53, 0x50, 0x00}
 var NTLMSSP_AUTH = []byte{03, 00, 00, 00}
@@ -48,7 +45,7 @@ func checkIdBytes(arr []byte, id_arr []byte) bool {
 	return true
 }
 
-// Use as interim function to create and feed packets into meat of program
+// Parse pcap to pull out SMB2 packets, and add to an array
 func initPackets(file string) {
 	var smb_packets []SMBPacket
 	// Open PCAP from file
@@ -70,9 +67,34 @@ func initPackets(file string) {
 			}
 		}
 	}
-	for _, p := range smb_packets {
-		if p.username != nil {
-			fmt.Println(p.username)
+	extract_hashes(smb_packets)
+}
+
+// Format of hash
+// [Username]::[Domain]:[NTLM Server Challenge]:[NTProofStr]:[Rest of NTLM Response]
+func extract_hashes(packets []SMBPacket) {
+	for i, p := range packets {
+		if p.NTLM_Response != nil {
+			fmt.Println("Hash found")
+			for _, b := range p.username {
+				fmt.Printf("%x", b)
+			}
+			fmt.Printf("::")
+			for _, b := range p.domain {
+				fmt.Printf("%x", b)
+			}
+			fmt.Printf(":")
+			for _, b := range packets[i-1].NT_challenge {
+				fmt.Printf("%x", b)
+			}
+			fmt.Printf(":")
+			for _, b := range p.NTProofStr {
+				fmt.Printf("%x", b)
+			}
+			fmt.Printf(":")
+			for _, b := range p.rest_of_NTLM {
+				fmt.Printf("%x", b)
+			}
 		}
 	}
 }
@@ -159,8 +181,6 @@ func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
 				if len(packet.smbPacket) > blob_offset+33 && checkIdBytes(packet.smbPacket[blob_offset+33:], NTLMSSP_identifier) {
 					packet.SSP = packet.blob[33:]
 					if checkIdBytes(packet.SSP[8:], NTLMSSP_CHALLENGE) {
-						debugPrint(packet.SSP)
-
 						packet.NT_challenge = packet.SSP[24:32]
 					}
 				}
@@ -200,5 +220,4 @@ func main() {
 	}
 	// Call packet init sequence
 	initPackets(*file)
-
 }

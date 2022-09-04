@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 
@@ -60,7 +61,7 @@ func initPackets(file string) {
 
 						fmt.Println("\n")
 
-						debugPrint(smbPacket.ssp)
+						debugPrint(smbPacket.SSP[16*7:])
 
 					}
 					fmt.Println("\n")
@@ -106,6 +107,8 @@ func arrInSubArray(sub []int, arr []int) bool {
 
 func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
 	var packet SMBPacket
+	// bytes for the string "NTLMSSP"
+	ssp_str := []byte{0x4e, 0x54, 0x4c, 0x4d, 0x53, 0x53, 0x50, 0x00}
 
 	// Place the entire raw packet
 	packet.payload = raw_packet.Data()
@@ -113,7 +116,10 @@ func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
 	// Header length is directly after protocol id
 	packet.header_length = int(raw_packet.ApplicationLayer().Payload()[8])
 	packet.header = raw_packet.ApplicationLayer().Payload()[:packet.header_length]
-	packet.SSP = raw_packet.ApplicationLayer().Payload()[packet.header_length+44:]
+	// Check if the NTLMSSP Identifier is "NTLMSSP"
+	if bytes.Equal(raw_packet.ApplicationLayer().Payload()[packet.header_length+44:], ssp_str) {
+		packet.SSP = raw_packet.ApplicationLayer().Payload()[packet.header_length+44:]
+	}
 
 	return packet
 }

@@ -53,7 +53,7 @@ func initPackets(file string) {
 			if appLayer != nil {
 
 				// TODO: only pulling out long packets (for testing)
-				if len(appLayer.Payload()) > 550 {
+				if len(appLayer.Payload()) > 200 {
 					fmt.Println("Application Layer found!")
 					smbPacket := makeSMBPacket(packet)
 					fmt.Printf("Length: %d\n", len(smbPacket.payload))

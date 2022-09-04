@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"os"
 
@@ -76,44 +77,14 @@ func extract_hashes(packets []SMBPacket) {
 	for i, p := range packets {
 		if p.NTLM_Response != nil {
 			fmt.Println("Hash found")
-			for _, b := range p.username {
-				fmt.Printf("%x", b)
-			}
-			fmt.Printf("::")
-			for _, b := range p.domain {
-				fmt.Printf("%x", b)
-			}
-			fmt.Printf(":")
-			for _, b := range packets[i-1].NT_challenge {
-				fmt.Printf("%x", b)
-			}
-			fmt.Printf(":")
-			for _, b := range p.NTProofStr {
-				fmt.Printf("%x", b)
-			}
-			fmt.Printf(":")
-			for _, b := range p.rest_of_NTLM {
-				fmt.Printf("%x", b)
-			}
+			fmt.Printf(
+				"%s::%s:%s:%s:%s",
+				p.username,
+				p.domain,
+				hex.EncodeToString(packets[i-1].NT_challenge),
+				hex.EncodeToString(p.NTProofStr),
+				hex.EncodeToString(p.rest_of_NTLM))
 		}
-	}
-}
-
-/*
-	Print a byte array (in practice, a packet) in the format of:
-	0000: 00 00 00 00 00 00 00 00
-	0010: 00 00 00 00 00 00 00 00
-	0020: 00 00 00 00 00 00 00 00
-*/
-func debugPrint(payload []byte) {
-	for i := 0; i <= (len(payload) / 16); i++ {
-		fmt.Printf("%4x: ", i)
-		for j := 0; j < 16; j++ {
-			if (16*i)+j < len(payload) {
-				fmt.Printf("%2x ", payload[(16*i)+j])
-			}
-		}
-		fmt.Println("")
 	}
 }
 
@@ -162,6 +133,7 @@ func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
 						NTLM_Offset := bytesArrToInt(packet.SSP[24:28])
 						NTLM_Maxlen := bytesArrToInt(packet.SSP[22:24])
 						packet.NTLM_Response = packet.SSP[NTLM_Offset : NTLM_Offset+NTLM_Maxlen]
+						fmt.Printf("%s\n", hex.Dump(packet.NTLM_Response))
 						packet.NTProofStr = packet.NTLM_Response[:16]
 						packet.rest_of_NTLM = packet.NTLM_Response[16:]
 
@@ -172,8 +144,6 @@ func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
 						username_Offset := bytesArrToInt(packet.SSP[40:44])
 						username_Maxlen := bytesArrToInt(packet.SSP[38:40])
 						packet.username = packet.SSP[username_Offset : username_Offset+username_Maxlen]
-					} else if checkIdBytes(packet.smbPacket[blob_offset+24:], NTLMSSP_CHALLENGE) {
-						fmt.Println("TODO Challenge Resp")
 					}
 				}
 				// Response packet
@@ -220,4 +190,5 @@ func main() {
 	}
 	// Call packet init sequence
 	initPackets(*file)
+	fmt.Println()
 }

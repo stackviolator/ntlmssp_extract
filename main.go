@@ -136,14 +136,14 @@ func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
 
 	// Check if the NTLMSSP Identifier is "NTLMSSP"
 	if checkSSP(packet.smbPacket[packet.header_length+44:]) {
-		packet.SSP = raw_packet.ApplicationLayer().Payload()[packet.header_length+44:]
+		packet.SSP = packet.blob
 		NTLM_Maxlen := bytesArrToInt(packet.SSP[22:24])
 		packet.NTLM_Response = packet.SSP[112 : 112+NTLM_Maxlen]
 	}
 
 	debugPrint(packet.smbPacket)
 	fmt.Println()
-	debugPrint(packet.blob)
+	debugPrint(packet.SSP)
 	fmt.Println()
 
 	return packet

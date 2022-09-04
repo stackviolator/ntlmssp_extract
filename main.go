@@ -1,3 +1,5 @@
+// Note to future Josh from past Josh - when debugging, use hex.Dump([]byte)
+
 package main
 
 import (
@@ -132,7 +134,6 @@ func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
 						NTLM_Offset := bytesArrToInt(packet.SSP[24:28])
 						NTLM_Maxlen := bytesArrToInt(packet.SSP[22:24])
 						packet.NTLM_Response = packet.SSP[NTLM_Offset : NTLM_Offset+NTLM_Maxlen]
-						fmt.Printf("%s\n", hex.Dump(packet.NTLM_Response))
 						packet.NTProofStr = packet.NTLM_Response[:16]
 						packet.rest_of_NTLM = packet.NTLM_Response[16:]
 
@@ -181,7 +182,7 @@ func bytesArrToInt(arr []byte) int {
 
 func main() {
 	// Set up the argparse system
-	parser := argparse.NewParser("test", "i am testing rn")
+	parser := argparse.NewParser("go run main.go", "NTLM Extactor - Pull NetNTLMv2 hashes from a PCAP file")
 	file := parser.String("f", "file", &argparse.Options{Required: true, Help: "Input PCAP file"})
 	err := parser.Parse(os.Args)
 	if err != nil {

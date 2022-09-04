@@ -61,7 +61,7 @@ func initPackets(file string) {
 
 						fmt.Println("\n")
 
-						debugPrint(smbPacket.SSP[16*7:])
+						debugPrint(smbPacket.SSP)
 
 					}
 					fmt.Println("\n")

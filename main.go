@@ -9,6 +9,13 @@ import (
 	"github.com/google/gopacket/pcap"
 )
 
+type SMBPacket struct {
+	header_length int
+	payload       []byte
+	header        []byte
+	protocol_id   []byte
+}
+
 // Format of hash
 // [Username]::[Domain]:[NTLM Server Challenge]:[NTProofStr]:[Rest of NTLM Response]
 
@@ -34,22 +41,49 @@ func initPackets(file string) {
 			appLayer := packet.ApplicationLayer()
 			// If there is an application layer in the packet
 			if appLayer != nil {
+
 				// TODO: only pulling out long packets (for testing)
-				if len(appLayer.Payload()) > 200 {
+				if len(appLayer.Payload()) > 550 {
 					fmt.Println("Application Layer found!")
-					if checkSMBProtocol(appLayer.Payload()[4:8]) {
+					smbPacket := makeSMBPacket(packet)
+					fmt.Printf("Length: %d\n", len(smbPacket.payload))
+
+					if checkSMBProtocol(smbPacket.protocol_id) {
 						fmt.Println("SMB2 Packet found!")
-						fmt.Printf("Length of payload: %d\n", len(appLayer.Payload()))
-						// TODO: Print out all the raw bytes (testing)
-						for _, b := range appLayer.Payload() {
-							// Looking at direct bytes
-							fmt.Printf("%x ", byte(b))
+
+						debugPrint(packet.Data())
+
+						for i := 0; i < 9; i++ {
+							fmt.Printf("%x ", smbPacket.payload[80+i])
 						}
+
+						fmt.Println("\n")
+
+						debugPrint(getVerifierBody(packet))
+
 					}
 					fmt.Println("\n")
 				}
 			}
 		}
+	}
+}
+
+func getVerifierBody(packet gopacket.Packet) []byte {
+	appLayer := packet.ApplicationLayer().Payload()
+
+	return appLayer[len(appLayer)-12:]
+}
+
+func debugPrint(payload []byte) {
+	for i := 0; i <= (len(payload) / 16); i++ {
+		fmt.Printf("%4x: ", i)
+		for j := 0; j < 16; j++ {
+			if (16*i)+j < len(payload) {
+				fmt.Printf("%2x ", payload[(16*i)+j])
+			}
+		}
+		fmt.Println("")
 	}
 }
 
@@ -73,6 +107,19 @@ func arrInSubArray(sub []int, arr []int) bool {
 		}
 	}
 	return false
+}
+
+func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
+	var packet SMBPacket
+
+	// Place the entire raw packet
+	packet.payload = raw_packet.Data()
+	packet.protocol_id = raw_packet.ApplicationLayer().Payload()[4:7]
+	// Header length is directly after protocol id
+	packet.header_length = int(raw_packet.ApplicationLayer().Payload()[8])
+	packet.header = raw_packet.ApplicationLayer().Payload()[:packet.header_length]
+
+	return packet
 }
 
 func main() {

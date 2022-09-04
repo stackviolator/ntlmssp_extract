@@ -14,7 +14,7 @@ type SMBPacket struct {
 	payload       []byte
 	header        []byte
 	protocol_id   []byte
-	ssp           []byte
+	SSP           []byte
 }
 
 // Format of hash
@@ -113,7 +113,7 @@ func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
 	// Header length is directly after protocol id
 	packet.header_length = int(raw_packet.ApplicationLayer().Payload()[8])
 	packet.header = raw_packet.ApplicationLayer().Payload()[:packet.header_length]
-	packet.ssp = raw_packet.ApplicationLayer().Payload()[packet.header_length+16:]
+	packet.SSP = raw_packet.ApplicationLayer().Payload()[packet.header_length+44:]
 
 	return packet
 }

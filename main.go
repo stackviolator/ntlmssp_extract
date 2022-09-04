@@ -19,6 +19,9 @@ type SMBPacket struct {
 	protocol_id   []byte
 	SSP           []byte
 	NTLM_Response []byte
+	NTProofStr    []byte
+	domain        []byte
+	username      []byte
 }
 
 // Format of hash
@@ -132,19 +135,33 @@ func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
 	blob_offset := bytesArrToInt(packet.smbPacket[packet.header_length+12 : packet.header_length+14])
 
 	packet.blob = packet.smbPacket[blob_offset:]
-	fmt.Println(blob_offset)
 
 	// Check if the NTLMSSP Identifier is "NTLMSSP"
-	if checkSSP(packet.smbPacket[packet.header_length+44:]) {
-		packet.SSP = packet.blob
+	if checkSSP(packet.smbPacket[blob_offset+16:]) {
+		packet.SSP = packet.blob[16:]
+
+		NTLM_Offset := bytesArrToInt(packet.SSP[24:28])
 		NTLM_Maxlen := bytesArrToInt(packet.SSP[22:24])
-		packet.NTLM_Response = packet.SSP[112 : 112+NTLM_Maxlen]
+		fmt.Println(NTLM_Offset, NTLM_Maxlen)
+		packet.NTLM_Response = packet.SSP[NTLM_Offset : NTLM_Offset+NTLM_Maxlen]
+		packet.NTProofStr = packet.NTLM_Response[:16]
+
+		domain_Offset := bytesArrToInt(packet.SSP[32:36])
+		domain_Maxlen := bytesArrToInt(packet.SSP[30:32])
+		packet.domain = packet.SSP[domain_Offset : domain_Offset+domain_Maxlen]
+
+		username_Offset := bytesArrToInt(packet.SSP[40:44])
+		username_Maxlen := bytesArrToInt(packet.SSP[38:40])
+		fmt.Println(username_Offset, username_Maxlen)
+		packet.username = packet.SSP[username_Offset : username_Offset+username_Maxlen]
 	}
 
 	debugPrint(packet.smbPacket)
 	fmt.Println()
 	debugPrint(packet.SSP)
 	fmt.Println()
+	debugPrint(packet.domain)
+	debugPrint(packet.username)
 
 	return packet
 }
@@ -152,16 +169,21 @@ func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
 // Convert byte arr to an int, useful for length field in a packet
 func bytesArrToInt(arr []byte) int {
 	init_len := len(arr)
+	// When appending 0's to the array later in the function, will overwrite bytes in the og packet array
+	var usable []byte
+	for _, b := range arr {
+		usable = append(usable, b)
+	}
 
 	if init_len > 8 {
 		fmt.Println("Can't take a byte string longer than 8")
 	}
 
 	for i := 0; i < 8-init_len; i++ {
-		arr = append(arr, 0)
+		usable = append(usable, 0)
 	}
 
-	return int(binary.LittleEndian.Uint64(arr))
+	return int(binary.LittleEndian.Uint64(usable))
 }
 
 func main() {

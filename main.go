@@ -60,7 +60,6 @@ func initPackets(file string) {
 			if appLayer != nil {
 				if len(appLayer.Payload()) > 0 {
 					if checkIdBytes(appLayer.Payload()[4:8], smb_protocol_id) {
-						fmt.Println("SMB2 Packet found!")
 						smbPacket := makeSMBPacket(packet)
 						smb_packets = append(smb_packets, smbPacket)
 					}

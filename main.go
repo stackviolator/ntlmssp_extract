@@ -27,22 +27,12 @@ type SMBPacket struct {
 // Format of hash
 // [Username]::[Domain]:[NTLM Server Challenge]:[NTProofStr]:[Rest of NTLM Response]
 
-// See if the the 4-8 index of the ApplicationLayer array == the SMB protocol ID
-func checkSMBProtocol(arr []byte) bool {
-	smb2Id := []byte{254, 83, 77, 66}
-	for i, b := range arr {
-		if b != smb2Id[i] {
-			return false
-		}
-	}
-	return true
-}
+var smb_protocol_id = []byte{0xf3, 0x53, 0x4d, 0x42}
+var NTLMSSP_identifier = []byte{0x4e, 0x54, 0x4c, 0x4d, 0x53, 0x53, 0x50, 0x00}
 
-// TODO: combine these two functions
-func checkSSP(arr []byte) bool {
-	// bytes for the string "NTLMSSP"
-	ssp_str := []byte{0x4e, 0x54, 0x4c, 0x4d, 0x53, 0x53, 0x50, 0x00}
-	for i, b := range ssp_str {
+// See if two given byte arrays are equal, used to identify parts of packets
+func checkIdBytes(arr []byte, id_arr []byte) bool {
+	for i, b := range id_arr {
 		if b != arr[i] {
 			return false
 		}
@@ -68,9 +58,8 @@ func initPackets(file string) {
 					smbPacket := makeSMBPacket(packet)
 					fmt.Printf("Length: %d\n", len(smbPacket.payload))
 
-					if checkSMBProtocol(smbPacket.protocol_id) {
+					if checkIdBytes(smbPacket.protocol_id, smb_protocol_id) {
 						fmt.Println("SMB2 Packet found!")
-
 					}
 					fmt.Println("\n")
 				}
@@ -137,7 +126,7 @@ func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
 	packet.blob = packet.smbPacket[blob_offset:]
 
 	// Check if the NTLMSSP Identifier is "NTLMSSP"
-	if checkSSP(packet.smbPacket[blob_offset+16:]) {
+	if checkIdBytes(packet.smbPacket[blob_offset+16:], NTLMSSP_identifier) {
 		packet.SSP = packet.blob[16:]
 
 		NTLM_Offset := bytesArrToInt(packet.SSP[24:28])

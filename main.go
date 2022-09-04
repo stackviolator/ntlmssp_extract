@@ -14,6 +14,7 @@ type SMBPacket struct {
 	payload       []byte
 	header        []byte
 	protocol_id   []byte
+	ssp           []byte
 }
 
 // Format of hash
@@ -59,7 +60,7 @@ func initPackets(file string) {
 
 						fmt.Println("\n")
 
-						debugPrint(getVerifierBody(packet))
+						debugPrint(smbPacket.ssp)
 
 					}
 					fmt.Println("\n")
@@ -67,12 +68,6 @@ func initPackets(file string) {
 			}
 		}
 	}
-}
-
-func getVerifierBody(packet gopacket.Packet) []byte {
-	appLayer := packet.ApplicationLayer().Payload()
-
-	return appLayer[len(appLayer)-12:]
 }
 
 func debugPrint(payload []byte) {
@@ -118,6 +113,7 @@ func makeSMBPacket(raw_packet gopacket.Packet) SMBPacket {
 	// Header length is directly after protocol id
 	packet.header_length = int(raw_packet.ApplicationLayer().Payload()[8])
 	packet.header = raw_packet.ApplicationLayer().Payload()[:packet.header_length]
+	packet.ssp = raw_packet.ApplicationLayer().Payload()[packet.header_length+16:]
 
 	return packet
 }

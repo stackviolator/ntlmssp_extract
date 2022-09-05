@@ -12,9 +12,15 @@ import (
 	"time"
 
 	"github.com/akamensky/argparse"
+	"github.com/common-nighthawk/go-figure"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 )
+
+// Global vars for super cool colors
+var colorGreen = "\033[32m"
+var colorReset = "\033[0m"
+var colorRed = "\033[31m"
 
 type SMBPacket struct {
 	header_length int
@@ -39,6 +45,14 @@ var smb_protocol_id = []byte{0xfe, 0x53, 0x4d, 0x42}
 var NTLMSSP_identifier = []byte{0x4e, 0x54, 0x4c, 0x4d, 0x53, 0x53, 0x50, 0x00}
 var NTLMSSP_AUTH = []byte{03, 00, 00, 00}
 var NTLMSSP_CHALLENGE = []byte{02, 00, 00, 00}
+
+// Colored print utils
+func printSuccess(str string) {
+	fmt.Printf("%s[*] %s%s\n", colorGreen, str, colorReset)
+}
+func printError(str string) {
+	fmt.Printf("%s[*] %s%s\n", colorRed, colorReset, str)
+}
 
 // See if two given byte arrays are equal, used to identify parts of packets
 func checkIdBytes(arr []byte, id_arr []byte) bool {
@@ -89,7 +103,7 @@ func handleGoPackets(packets []gopacket.Packet) {
 func extract_hashes(packets []SMBPacket) {
 	for i, p := range packets {
 		if p.NTLM_Response != nil {
-			fmt.Println("Hash found")
+			printSuccess("Hash found")
 			fmt.Printf(
 				"%s::%s:%s:%s:%s",
 				p.username,
@@ -260,15 +274,24 @@ func findDevices() {
 }
 
 func main() {
+	// Print the banner
+	fmt.Print(colorRed)
+	banner := figure.NewFigure("NTLM Extract", "larry3d", true)
+	banner.Print()
+	fmt.Print(colorReset)
+
 	// Set up the argparse system
-	parser := argparse.NewParser("go run main.go", "NTLM Extactor - Pull NetNTLMv2 hashes from a PCAP file")
+	parser := argparse.NewParser("go run main.go", "NTLM Extactor - Carve NetNTLMv2 hashes from a your packets\n- Live capture SMB packets or supply a PCAP file to get started\n- Pls use for legal purposes only :)")
 	file := parser.String("f", "file", &argparse.Options{Required: false, Help: "Input PCAP file"})
 	live := parser.Flag("l", "live-capture", &argparse.Options{Required: false, Help: "Live capture of packets on your network"})
 	device := parser.String("d", "device", &argparse.Options{Required: false, Help: "Device for live capture"})
 	err := parser.Parse(os.Args)
 	if err != nil {
 		fmt.Print(parser.Usage(err))
+		os.Exit(1)
 	}
+
+	fmt.Printf("%s\n\n", parser.GetDescription())
 
 	capturePackets(*live, *device)
 	// Call packet init sequence

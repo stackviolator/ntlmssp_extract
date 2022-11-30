@@ -19,7 +19,7 @@ Can be used to live caputre packets (be careful with this) or to process a PCAP 
 # Usage
 ## PCAP Processing
 - A valid PCAP file with SMB2 packets is needed for PCAP processing
-- `bin/ntlmextractor -f <path to pcap file> >> hash; hashcat -m 5600 -a 0 hash /usr/share/wordlists/rockyou.txt`
+- `bin/ntlmextractor -f <path to pcap file> >> hash; hashcat -m 5600 -a 0 hash /usr/share/wordlists/SecLists/Passwords/xato-net-10-million-passwords.txt`
 
 ## Live Capturing
 - If no device is supplied, NTLM Extract will list all available devices

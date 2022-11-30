@@ -13,13 +13,13 @@ Can be used to live caputre packets (be careful with this) or to process a PCAP 
 - Make sure to have go installed, all needed modules will be handled by go
 
 ## Installation
-- `go build -o bin/ntlmextractor`
+- `go build -o bin/ntlmextractor src/main.go`
 - `go run src/main.go`
 
 # Usage
 ## PCAP Processing
 - A valid PCAP file with SMB2 packets is needed for PCAP processing
-- `bin/ntlmextractor -f <path to pcap file> >> hash; hashcat -m 5600 -a 0 hash /usr/share/rockyou.txt`
+- `bin/ntlmextractor -f <path to pcap file> >> hash; hashcat -m 5600 -a 0 hash /usr/share/wordlists/rockyou.txt`
 
 ## Live Capturing
 - If no device is supplied, NTLM Extract will list all available devices
